@@ -52,3 +52,4 @@ export function CategoryBadge({ category, showIcon = true, size = 'sm' }: Catego
   );
 }
 
+

@@ -1,11 +1,22 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { CategoryBadge } from '@/components/emails/CategoryBadge';
 import {
   ArrowLeft,
@@ -24,62 +35,21 @@ import {
   MoreHorizontal,
   Brain,
   Sparkles,
+  MessageCircle,
+  Loader2,
+  Send,
+  Smile,
 } from 'lucide-react';
 import Link from 'next/link';
-import { Email } from '@/types';
-
-const mockEmail: Email = {
-  id: '1',
-  user_id: 'user1',
-  gmail_id: 'gmail1',
-  sender_email: 'john@acmecorp.com',
-  sender_name: 'John Smith',
-  subject: 'Partnership Opportunity - Q1 2026',
-  body: `Hi there,
-
-I wanted to reach out about a potential partnership between our companies. We have been following your work in the AI/ML space and believe there could be significant synergies between what you're building and our enterprise platform.
-
-Acme Corp serves over 500 enterprise clients globally, and we're looking to integrate AI-powered email intelligence into our CRM solution. Your InboxIQ product seems like a perfect fit.
-
-I'd love to schedule a call to discuss:
-1. Technical integration requirements
-2. Pricing for enterprise volume
-3. Timeline for a pilot program
-
-Our budget for this initiative is approximately $50,000 - $100,000 annually, depending on the scope.
-
-Would you be available for a 30-minute call next week? I'm flexible on timing.
-
-Best regards,
-John Smith
-VP of Business Development
-Acme Corp
-john@acmecorp.com
-+1 (555) 123-4567`,
-  category: 'CRM',
-  confidence: 0.95,
-  reasoning: 'Business partnership inquiry with clear sales intent. The email mentions specific budget figures, enterprise scale, and requests a sales call. Contains multiple buying signals including timeline, budget, and technical requirements.',
-  entities: {
-    contacts: [
-      { name: 'John Smith', email: 'john@acmecorp.com', phone: '+1 (555) 123-4567', role: 'VP of Business Development' }
-    ],
-    companies: [
-      { name: 'Acme Corp', industry: 'Enterprise Software', website: 'acmecorp.com' }
-    ],
-    intent: 'Partnership proposal and product inquiry',
-    urgency: 'high',
-    action_items: [
-      'Schedule discovery call',
-      'Prepare enterprise pricing deck',
-      'Review technical integration docs',
-      'Check calendar for next week availability'
-    ],
-    key_dates: ['Q1 2026', 'next week'],
-    monetary_values: ['$50,000 - $100,000 annually'],
-  },
-  processed_at: new Date().toISOString(),
-  created_at: new Date(Date.now() - 3600000).toISOString(),
-};
+import { Message } from '@/types';
+import { cn } from '@/lib/utils';
+import { use, useRef } from 'react';
+import { EmojiPicker } from '@/components/ui/emoji-picker';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 function getInitials(name: string): string {
   return name
@@ -90,13 +60,136 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export default function EmailDetailPage({ params }: { params: { id: string } }) {
-  const email = mockEmail;
+export default function MessageDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const [message, setMessage] = useState<Message | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Reply state
+  const [showReplyDialog, setShowReplyDialog] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replySuccess, setReplySuccess] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleEmojiSelect = (emoji: string) => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newText = replyText.slice(0, start) + emoji + replyText.slice(end);
+      setReplyText(newText);
+      // Set cursor position after emoji
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + emoji.length;
+        textarea.focus();
+      }, 0);
+    } else {
+      setReplyText(prev => prev + emoji);
+    }
+  };
+
+  useEffect(() => {
+    async function fetchMessage() {
+      try {
+        const response = await fetch(`/api/emails?id=${id}`);
+        const data = await response.json();
+        if (data.emails && data.emails.length > 0) {
+          setMessage(data.emails[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching message:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchMessage();
+  }, [id]);
+
+  const handleReply = async () => {
+    if (!replyText.trim() || !message) return;
+
+    setSendingReply(true);
+    setReplyError(null);
+
+    try {
+      const response = await fetch('/api/telegram/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId: message.id,
+          replyText: replyText.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setReplySuccess(true);
+        setReplyText('');
+        setTimeout(() => {
+          setShowReplyDialog(false);
+          setReplySuccess(false);
+        }, 1500);
+      } else {
+        setReplyError(data.error || 'Failed to send reply');
+      }
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      setReplyError('Failed to send reply');
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const closeReplyDialog = () => {
+    setShowReplyDialog(false);
+    setReplyText('');
+    setReplyError(null);
+    setReplySuccess(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen">
+        <Header title="Message Details" subtitle="Loading..." />
+        <div className="flex items-center justify-center h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!message) {
+    return (
+      <div className="min-h-screen">
+        <Header title="Message Details" subtitle="Message not found" />
+        <div className="p-6">
+          <Link href="/emails">
+            <Button variant="ghost" className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Messages
+            </Button>
+          </Link>
+          <Card className="mt-6 glass">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <p className="text-muted-foreground">Message not found</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const isTelegram = message.source === 'telegram';
 
   return (
     <div className="min-h-screen">
       <Header 
-        title="Email Details" 
+        title="Message Details" 
         subtitle="AI-powered analysis and insights" 
       />
       
@@ -104,7 +197,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
         <Link href="/emails">
           <Button variant="ghost" className="mb-4 gap-2 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
-            Back to Emails
+            Back to Messages
           </Button>
         </Link>
 
@@ -114,31 +207,58 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
-                    <Avatar className="h-12 w-12 border-2 border-primary/30">
-                      <AvatarFallback className="bg-primary/20 text-primary font-medium">
-                        {getInitials(email.sender_name || email.sender_email)}
+                    <Avatar className={cn(
+                      "h-12 w-12 border-2",
+                      isTelegram ? "border-blue-400/30" : "border-primary/30"
+                    )}>
+                      <AvatarFallback className={cn(
+                        "font-medium",
+                        isTelegram ? "bg-blue-500/20 text-blue-400" : "bg-primary/20 text-primary"
+                      )}>
+                        {getInitials(message.sender_name || message.sender_email)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <h2 className="text-lg font-semibold">{email.sender_name}</h2>
-                      <p className="text-sm text-muted-foreground">{email.sender_email}</p>
+                      <div className="flex items-center gap-2">
+                        {isTelegram ? (
+                          <MessageCircle className="h-4 w-4 text-blue-400" />
+                        ) : (
+                          <Mail className="h-4 w-4 text-primary" />
+                        )}
+                        <h2 className="text-lg font-semibold">{message.sender_name}</h2>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {isTelegram && message.sender_username 
+                          ? `@${message.sender_username}` 
+                          : message.sender_email}
+                      </p>
+                      {isTelegram && message.chat_name && (
+                        <p className="text-sm text-blue-400">
+                          {message.chat_type?.toUpperCase()}: {message.chat_name}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {email.category && <CategoryBadge category={email.category} size="md" />}
-                    {email.entities?.urgency === 'high' && (
+                    {message.category && <CategoryBadge category={message.category} size="md" />}
+                    {message.entities?.urgency === 'high' && (
                       <Badge variant="destructive" className="gap-1">
                         <AlertCircle className="h-3 w-3" />
                         Urgent
                       </Badge>
                     )}
+                    {isTelegram && (
+                      <Badge variant="outline" className="text-blue-400 border-blue-400/30">
+                        Telegram
+                      </Badge>
+                    )}
                   </div>
                 </div>
-                <CardTitle className="text-xl mt-4">{email.subject}</CardTitle>
+                <CardTitle className="text-xl mt-4">{message.subject}</CardTitle>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
                   <span className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
-                    {new Date(email.created_at).toLocaleString()}
+                    {new Date(message.created_at).toLocaleString()}
                   </span>
                 </div>
               </CardHeader>
@@ -146,22 +266,34 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
               <CardContent className="pt-6">
                 <div className="prose prose-invert max-w-none">
                   <pre className="whitespace-pre-wrap font-sans text-sm text-foreground bg-transparent p-0 m-0">
-                    {email.body}
+                    {message.body}
                   </pre>
                 </div>
               </CardContent>
               <Separator />
               <CardContent className="pt-4">
                 <div className="flex items-center gap-2">
-                  <Button variant="secondary" className="gap-2">
-                    <Reply className="h-4 w-4" />
-                    Reply
-                  </Button>
-                  <Button variant="secondary" className="gap-2">
+                  {isTelegram && (
+                    <Button 
+                      variant="secondary" 
+                      className="gap-2"
+                      onClick={() => setShowReplyDialog(true)}
+                    >
+                      <Reply className="h-4 w-4" />
+                      Reply
+                    </Button>
+                  )}
+                  {!isTelegram && (
+                    <Button variant="secondary" className="gap-2" disabled>
+                      <Reply className="h-4 w-4" />
+                      Reply
+                    </Button>
+                  )}
+                  <Button variant="secondary" className="gap-2" disabled>
                     <Forward className="h-4 w-4" />
                     Forward
                   </Button>
-                  <Button variant="ghost" className="gap-2 text-destructive hover:text-destructive">
+                  <Button variant="ghost" className="gap-2 text-destructive hover:text-destructive" disabled>
                     <Trash2 className="h-4 w-4" />
                     Delete
                   </Button>
@@ -174,10 +306,10 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
           </div>
 
           <div className="space-y-6">
-            <Card className="glass border-primary/30">
+            <Card className={cn("glass", isTelegram ? "border-blue-400/30" : "border-primary/30")}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Brain className="h-5 w-5 text-primary" />
+                  <Brain className={cn("h-5 w-5", isTelegram ? "text-blue-400" : "text-primary")} />
                   AI Analysis
                 </CardTitle>
               </CardHeader>
@@ -185,21 +317,21 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-1">Classification</p>
                   <div className="flex items-center justify-between">
-                    {email.category && <CategoryBadge category={email.category} size="md" />}
+                    {message.category && <CategoryBadge category={message.category} size="md" />}
                     <span className="text-sm text-success font-medium">
-                      {email.confidence && `${Math.round(email.confidence * 100)}% confident`}
+                      {message.confidence && `${Math.round(message.confidence * 100)}% confident`}
                     </span>
                   </div>
                 </div>
                 <Separator />
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-2">Reasoning</p>
-                  <p className="text-sm text-foreground">{email.reasoning}</p>
+                  <p className="text-sm text-foreground">{message.reasoning}</p>
                 </div>
               </CardContent>
             </Card>
 
-            {email.entities && (
+            {message.entities && (
               <>
                 <Card className="glass">
                   <CardHeader className="pb-2">
@@ -211,21 +343,21 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Intent</span>
-                      <Badge variant="outline">{email.entities.intent}</Badge>
+                      <Badge variant="outline">{message.entities.intent}</Badge>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Urgency</span>
                       <Badge 
-                        variant={email.entities.urgency === 'high' ? 'destructive' : 'outline'}
-                        className={email.entities.urgency === 'medium' ? 'border-warning text-warning' : ''}
+                        variant={message.entities.urgency === 'high' ? 'destructive' : 'outline'}
+                        className={message.entities.urgency === 'medium' ? 'border-warning text-warning' : ''}
                       >
-                        {email.entities.urgency}
+                        {message.entities.urgency}
                       </Badge>
                     </div>
                   </CardContent>
                 </Card>
 
-                {email.entities.contacts.length > 0 && (
+                {message.entities.contacts && message.entities.contacts.length > 0 && (
                   <Card className="glass">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -234,7 +366,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {email.entities.contacts.map((contact, idx) => (
+                      {message.entities.contacts.map((contact, idx) => (
                         <div key={idx} className="p-3 rounded-lg bg-secondary/50">
                           <p className="font-medium">{contact.name}</p>
                           {contact.role && (
@@ -252,7 +384,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                   </Card>
                 )}
 
-                {email.entities.companies.length > 0 && (
+                {message.entities.companies && message.entities.companies.length > 0 && (
                   <Card className="glass">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -261,7 +393,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {email.entities.companies.map((company, idx) => (
+                      {message.entities.companies.map((company, idx) => (
                         <div key={idx} className="p-3 rounded-lg bg-secondary/50">
                           <p className="font-medium">{company.name}</p>
                           {company.industry && (
@@ -276,7 +408,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                   </Card>
                 )}
 
-                {email.entities.action_items.length > 0 && (
+                {message.entities.action_items && message.entities.action_items.length > 0 && (
                   <Card className="glass">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -286,7 +418,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                     </CardHeader>
                     <CardContent>
                       <ul className="space-y-2">
-                        {email.entities.action_items.map((item, idx) => (
+                        {message.entities.action_items.map((item, idx) => (
                           <li key={idx} className="flex items-start gap-2 text-sm">
                             <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                             {item}
@@ -297,7 +429,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                   </Card>
                 )}
 
-                {email.entities.monetary_values.length > 0 && (
+                {message.entities.monetary_values && message.entities.monetary_values.length > 0 && (
                   <Card className="glass border-success/30">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -307,7 +439,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {email.entities.monetary_values.map((value, idx) => (
+                        {message.entities.monetary_values.map((value, idx) => (
                           <Badge key={idx} variant="outline" className="text-success border-success/50 text-lg px-3 py-1">
                             {value}
                           </Badge>
@@ -317,7 +449,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                   </Card>
                 )}
 
-                {email.entities.key_dates.length > 0 && (
+                {message.entities.key_dates && message.entities.key_dates.length > 0 && (
                   <Card className="glass">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -327,7 +459,7 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
                     </CardHeader>
                     <CardContent>
                       <div className="flex flex-wrap gap-2">
-                        {email.entities.key_dates.map((date, idx) => (
+                        {message.entities.key_dates.map((date, idx) => (
                           <Badge key={idx} variant="outline" className="text-purple-400 border-purple-400/50">
                             {date}
                           </Badge>
@@ -341,7 +473,94 @@ export default function EmailDetailPage({ params }: { params: { id: string } }) 
           </div>
         </div>
       </div>
+
+      {/* Reply Dialog */}
+      <Dialog open={showReplyDialog} onOpenChange={closeReplyDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-blue-400" />
+              Reply to {message.sender_name}
+            </DialogTitle>
+            <DialogDescription>
+              Send a reply to this Telegram message
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {replyError && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm">{replyError}</span>
+              </div>
+            )}
+
+            {replySuccess && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-success/10 border border-success/30 text-success">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-sm">Reply sent successfully!</span>
+              </div>
+            )}
+
+            <div className="p-3 rounded-lg bg-secondary/50 text-sm">
+              <p className="text-muted-foreground mb-1">Replying to:</p>
+              <p className="text-foreground line-clamp-2">{message.body}</p>
+            </div>
+
+            <div className="relative">
+              <Textarea
+                ref={textareaRef}
+                placeholder="Type your reply..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                className="min-h-[120px] bg-secondary pr-12"
+                disabled={sendingReply || replySuccess}
+              />
+              <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-2 top-2 h-8 w-8 text-muted-foreground hover:text-foreground"
+                    disabled={sendingReply || replySuccess}
+                  >
+                    <Smile className="h-5 w-5" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent 
+                  className="w-auto p-0 border-none" 
+                  side="top" 
+                  align="end"
+                >
+                  <EmojiPicker onEmojiSelect={(emoji) => {
+                    handleEmojiSelect(emoji);
+                    setShowEmojiPicker(false);
+                  }} />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeReplyDialog} disabled={sendingReply}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleReply}
+              disabled={sendingReply || !replyText.trim() || replySuccess}
+              className="gap-2 bg-blue-600 hover:bg-blue-700"
+            >
+              {sendingReply ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {sendingReply ? 'Sending...' : 'Send Reply'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

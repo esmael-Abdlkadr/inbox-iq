@@ -1,7 +1,7 @@
 import { createClient } from './server';
-import { Email, EmailStats, EmailCategory } from '@/types';
+import { Message, MessageStats, MessageCategory } from '@/types';
 
-export async function getEmails(limit = 50): Promise<Email[]> {
+export async function getEmails(limit = 50): Promise<Message[]> {
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -18,7 +18,7 @@ export async function getEmails(limit = 50): Promise<Email[]> {
   return data || [];
 }
 
-export async function getEmailById(id: string): Promise<Email | null> {
+export async function getEmailById(id: string): Promise<Message | null> {
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -35,16 +35,16 @@ export async function getEmailById(id: string): Promise<Email | null> {
   return data;
 }
 
-export async function getEmailStats(): Promise<EmailStats> {
+export async function getEmailStats(): Promise<MessageStats> {
   const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('emails')
-    .select('category');
+    .select('category, source');
 
   if (error) {
     console.error('Error fetching stats:', error);
-    return { total: 0, crm: 0, cs: 0, spam: 0, unprocessed: 0 };
+    return { total: 0, crm: 0, cs: 0, spam: 0, unprocessed: 0, bySource: { email: 0, telegram: 0 } };
   }
 
   const emails = data || [];
@@ -54,10 +54,14 @@ export async function getEmailStats(): Promise<EmailStats> {
     cs: emails.filter((e) => e.category === 'CS').length,
     spam: emails.filter((e) => e.category === 'Spam').length,
     unprocessed: emails.filter((e) => !e.category).length,
+    bySource: {
+      email: emails.filter((e) => (e.source || 'email') === 'email').length,
+      telegram: emails.filter((e) => e.source === 'telegram').length,
+    },
   };
 }
 
-export async function getEmailsByCategory(category: EmailCategory): Promise<Email[]> {
+export async function getEmailsByCategory(category: MessageCategory): Promise<Message[]> {
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -74,7 +78,7 @@ export async function getEmailsByCategory(category: EmailCategory): Promise<Emai
   return data || [];
 }
 
-export async function createEmail(email: Partial<Email>): Promise<Email | null> {
+export async function createEmail(email: Partial<Message>): Promise<Message | null> {
   const supabase = await createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
@@ -97,7 +101,7 @@ export async function createEmail(email: Partial<Email>): Promise<Email | null> 
   return data;
 }
 
-export async function updateEmail(id: string, updates: Partial<Email>): Promise<Email | null> {
+export async function updateEmail(id: string, updates: Partial<Message>): Promise<Message | null> {
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -136,4 +140,5 @@ export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser();
   return user;
 }
+
 

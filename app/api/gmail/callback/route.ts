@@ -58,3 +58,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/settings?error=token_exchange_failed`);
   }
 }
+

@@ -22,12 +22,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { CategoryBadge } from './CategoryBadge';
-import { Email, EmailCategory } from '@/types';
-import { Search, Filter, Clock, ChevronRight, AlertCircle } from 'lucide-react';
+import { Message, MessageCategory, MessageSource } from '@/types';
+import { Search, Filter, Clock, ChevronRight, AlertCircle, Mail, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface EmailTableProps {
-  emails: Email[];
+interface MessageTableProps {
+  messages: Message[];
 }
 
 function getInitials(name: string): string {
@@ -55,20 +55,32 @@ function formatDate(date: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function EmailTable({ emails }: EmailTableProps) {
+function SourceIcon({ source }: { source: MessageSource }) {
+  if (source === 'telegram') {
+    return <MessageCircle className="h-4 w-4 text-blue-400" />;
+  }
+  return <Mail className="h-4 w-4 text-primary" />;
+}
+
+export function MessageTable({ messages }: MessageTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
 
-  const filteredEmails = emails.filter((email) => {
+  const filteredMessages = messages.filter((message) => {
     const matchesSearch =
-      email.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.sender_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      email.sender_email.toLowerCase().includes(searchQuery.toLowerCase());
+      message.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      message.sender_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      message.sender_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      message.chat_name?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCategory =
-      categoryFilter === 'all' || email.category === categoryFilter;
+      categoryFilter === 'all' || message.category === categoryFilter;
 
-    return matchesSearch && matchesCategory;
+    const matchesSource =
+      sourceFilter === 'all' || (message.source || 'email') === sourceFilter;
+
+    return matchesSearch && matchesCategory && matchesSource;
   });
 
   return (
@@ -77,13 +89,31 @@ export function EmailTable({ emails }: EmailTableProps) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search emails..."
+            placeholder="Search messages..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 bg-secondary/50"
           />
         </div>
         <div className="flex gap-2">
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className="w-[140px] bg-secondary/50">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="email">
+                <span className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" /> Email
+                </span>
+              </SelectItem>
+              <SelectItem value="telegram">
+                <span className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-blue-400" /> Telegram
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-[180px] bg-secondary/50">
               <Filter className="h-4 w-4 mr-2" />
@@ -103,8 +133,9 @@ export function EmailTable({ emails }: EmailTableProps) {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent border-border">
-              <TableHead className="w-[250px]">Sender</TableHead>
-              <TableHead>Subject</TableHead>
+              <TableHead className="w-[60px]">Source</TableHead>
+              <TableHead className="w-[220px]">Sender</TableHead>
+              <TableHead>Subject / Chat</TableHead>
               <TableHead className="w-[120px]">Category</TableHead>
               <TableHead className="w-[100px]">Confidence</TableHead>
               <TableHead className="w-[100px] text-right">Date</TableHead>
@@ -112,43 +143,63 @@ export function EmailTable({ emails }: EmailTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredEmails.map((email) => (
+            {filteredMessages.map((message) => (
               <TableRow
-                key={email.id}
+                key={message.id}
                 className="group cursor-pointer hover:bg-secondary/30 border-border"
               >
                 <TableCell>
-                  <Link href={`/emails/${email.id}`} className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9 border border-border">
-                      <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                        {getInitials(email.sender_name || email.sender_email)}
+                  <SourceIcon source={message.source || 'email'} />
+                </TableCell>
+                <TableCell>
+                  <Link href={`/emails/${message.id}`} className="flex items-center gap-3">
+                    <Avatar className={cn(
+                      "h-9 w-9 border border-border",
+                      message.source === 'telegram' && "border-blue-400/30"
+                    )}>
+                      <AvatarFallback className={cn(
+                        "text-sm",
+                        message.source === 'telegram' 
+                          ? "bg-blue-500/10 text-blue-400" 
+                          : "bg-primary/10 text-primary"
+                      )}>
+                        {getInitials(message.sender_name || message.sender_email)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="overflow-hidden">
                       <p className="font-medium text-foreground truncate">
-                        {email.sender_name || email.sender_email}
+                        {message.sender_name || message.sender_email}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {email.sender_email}
+                        {message.source === 'telegram' && message.sender_username 
+                          ? `@${message.sender_username}` 
+                          : message.sender_email}
                       </p>
                     </div>
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Link href={`/emails/${email.id}`} className="block">
+                  <Link href={`/emails/${message.id}`} className="block">
                     <div className="flex items-center gap-2">
-                      {email.entities?.urgency === 'high' && (
+                      {message.entities?.urgency === 'high' && (
                         <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                       )}
-                      <span className="truncate group-hover:text-primary transition-colors">
-                        {email.subject}
-                      </span>
+                      <div className="overflow-hidden">
+                        <span className="truncate group-hover:text-primary transition-colors block">
+                          {message.subject}
+                        </span>
+                        {message.source === 'telegram' && message.chat_name && (
+                          <span className="text-xs text-blue-400 truncate block">
+                            {message.chat_type?.toUpperCase()}: {message.chat_name}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 </TableCell>
                 <TableCell>
-                  {email.category ? (
-                    <CategoryBadge category={email.category} />
+                  {message.category ? (
+                    <CategoryBadge category={message.category} />
                   ) : (
                     <Badge variant="outline" className="text-muted-foreground">
                       Pending
@@ -156,23 +207,23 @@ export function EmailTable({ emails }: EmailTableProps) {
                   )}
                 </TableCell>
                 <TableCell>
-                  {email.confidence !== null && (
+                  {message.confidence !== null && (
                     <div className="flex items-center gap-2">
                       <div className="h-2 w-16 rounded-full bg-secondary overflow-hidden">
                         <div
                           className={cn(
                             'h-full rounded-full',
-                            email.confidence >= 0.9
+                            message.confidence >= 0.9
                               ? 'bg-success'
-                              : email.confidence >= 0.7
+                              : message.confidence >= 0.7
                               ? 'bg-warning'
                               : 'bg-destructive'
                           )}
-                          style={{ width: `${email.confidence * 100}%` }}
+                          style={{ width: `${message.confidence * 100}%` }}
                         />
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {Math.round(email.confidence * 100)}%
+                        {Math.round(message.confidence * 100)}%
                       </span>
                     </div>
                   )}
@@ -180,11 +231,11 @@ export function EmailTable({ emails }: EmailTableProps) {
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1 text-muted-foreground">
                     <Clock className="h-3 w-3" />
-                    <span className="text-sm">{formatDate(email.created_at)}</span>
+                    <span className="text-sm">{formatDate(message.created_at)}</span>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Link href={`/emails/${email.id}`}>
+                  <Link href={`/emails/${message.id}`}>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -196,10 +247,10 @@ export function EmailTable({ emails }: EmailTableProps) {
                 </TableCell>
               </TableRow>
             ))}
-            {filteredEmails.length === 0 && (
+            {filteredMessages.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
-                  <p className="text-muted-foreground">No emails found</p>
+                <TableCell colSpan={7} className="h-32 text-center">
+                  <p className="text-muted-foreground">No messages found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -209,5 +260,4 @@ export function EmailTable({ emails }: EmailTableProps) {
     </div>
   );
 }
-
 

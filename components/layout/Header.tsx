@@ -113,3 +113,4 @@ export function Header({ title, subtitle, onSyncClick, isSyncing }: HeaderProps)
     </header>
   );
 }
+

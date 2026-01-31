@@ -10,13 +10,14 @@ import {
   Settings,
   Zap,
   LogOut,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Emails', href: '/emails', icon: Mail },
+  { name: 'Messages', href: '/emails', icon: MessageSquare },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];
@@ -33,7 +34,7 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-foreground">InboxIQ</h1>
-            <p className="text-xs text-muted-foreground">AI Email Intelligence</p>
+            <p className="text-xs text-muted-foreground">AI Message Intelligence</p>
           </div>
         </div>
 
@@ -74,7 +75,7 @@ export function Sidebar() {
               <span className="text-sm font-medium">AI Powered</span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Emails are automatically classified and analyzed using Gemini AI.
+              Messages are automatically classified and analyzed using Gemini AI.
             </p>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
@@ -98,4 +99,3 @@ export function Sidebar() {
     </aside>
   );
 }
-

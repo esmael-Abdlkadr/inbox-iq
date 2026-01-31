@@ -16,46 +16,35 @@ import {
   Legend,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Message } from '@/types';
 
-const categoryData = [
-  { name: 'CRM', value: 67, color: '#3b82f6' },
-  { name: 'Support', value: 45, color: '#22c55e' },
-  { name: 'Spam', value: 44, color: '#ef4444' },
-];
+interface ChartProps {
+  messages?: Message[];
+}
 
-const weeklyData = [
-  { day: 'Mon', CRM: 12, CS: 8, Spam: 5 },
-  { day: 'Tue', CRM: 15, CS: 10, Spam: 7 },
-  { day: 'Wed', CRM: 8, CS: 12, Spam: 4 },
-  { day: 'Thu', CRM: 18, CS: 6, Spam: 9 },
-  { day: 'Fri', CRM: 14, CS: 9, Spam: 8 },
-  { day: 'Sat', CRM: 5, CS: 3, Spam: 6 },
-  { day: 'Sun', CRM: 3, CS: 2, Spam: 5 },
-];
+const COLORS = {
+  CRM: '#3b82f6',
+  CS: '#22c55e',
+  Spam: '#ef4444',
+  email: '#8b5cf6',
+  telegram: '#0ea5e9',
+};
 
-const trendData = [
-  { date: 'Jan 1', emails: 45, processed: 42 },
-  { date: 'Jan 8', emails: 52, processed: 50 },
-  { date: 'Jan 15', emails: 48, processed: 48 },
-  { date: 'Jan 22', emails: 70, processed: 68 },
-  { date: 'Jan 29', emails: 61, processed: 60 },
-  { date: 'Feb 5', emails: 85, processed: 82 },
-  { date: 'Feb 12', emails: 78, processed: 76 },
-];
+export function CategoryPieChart({ messages = [] }: ChartProps) {
+  const categoryData = [
+    { name: 'CRM', value: messages.filter(m => m.category === 'CRM').length, color: COLORS.CRM },
+    { name: 'Support', value: messages.filter(m => m.category === 'CS').length, color: COLORS.CS },
+    { name: 'Spam', value: messages.filter(m => m.category === 'Spam').length, color: COLORS.Spam },
+  ].filter(d => d.value > 0);
 
-const confidenceData = [
-  { range: '90-100%', count: 89 },
-  { range: '80-90%', count: 42 },
-  { range: '70-80%', count: 18 },
-  { range: '60-70%', count: 5 },
-  { range: '<60%', count: 2 },
-];
+  if (categoryData.length === 0) {
+    categoryData.push({ name: 'No Data', value: 1, color: '#404040' });
+  }
 
-export function CategoryPieChart() {
   return (
     <Card className="glass">
       <CardHeader>
-        <CardTitle className="text-lg">Email Categories</CardTitle>
+        <CardTitle className="text-lg">Message Categories</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">
@@ -93,11 +82,77 @@ export function CategoryPieChart() {
   );
 }
 
-export function WeeklyBarChart() {
+export function SourcePieChart({ messages = [] }: ChartProps) {
+  const sourceData = [
+    { name: 'Email', value: messages.filter(m => (m.source || 'email') === 'email').length, color: COLORS.email },
+    { name: 'Telegram', value: messages.filter(m => m.source === 'telegram').length, color: COLORS.telegram },
+  ].filter(d => d.value > 0);
+
+  if (sourceData.length === 0) {
+    sourceData.push({ name: 'No Data', value: 1, color: '#404040' });
+  }
+
   return (
     <Card className="glass">
       <CardHeader>
-        <CardTitle className="text-lg">Weekly Distribution</CardTitle>
+        <CardTitle className="text-lg">Message Sources</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={sourceData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {sourceData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#171717',
+                  border: '1px solid #262626',
+                  borderRadius: '8px',
+                }}
+                labelStyle={{ color: '#fafafa' }}
+              />
+              <Legend
+                formatter={(value) => <span style={{ color: '#a1a1aa' }}>{value}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function WeeklyBarChart({ messages = [] }: ChartProps) {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  
+  const weeklyData = days.map(day => {
+    const dayMessages = messages.filter(m => {
+      const msgDay = new Date(m.created_at).getDay();
+      return days[msgDay] === day;
+    });
+    
+    return {
+      day,
+      Email: dayMessages.filter(m => (m.source || 'email') === 'email').length,
+      Telegram: dayMessages.filter(m => m.source === 'telegram').length,
+    };
+  });
+
+  return (
+    <Card className="glass">
+      <CardHeader>
+        <CardTitle className="text-lg">Weekly Distribution by Source</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">
@@ -114,9 +169,11 @@ export function WeeklyBarChart() {
                 }}
                 labelStyle={{ color: '#fafafa' }}
               />
-              <Bar dataKey="CRM" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="CS" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Spam" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              <Legend
+                formatter={(value) => <span style={{ color: '#a1a1aa' }}>{value}</span>}
+              />
+              <Bar dataKey="Email" fill={COLORS.email} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Telegram" fill={COLORS.telegram} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -125,11 +182,84 @@ export function WeeklyBarChart() {
   );
 }
 
-export function TrendLineChart() {
+export function CategoryBySourceChart({ messages = [] }: ChartProps) {
+  const data = [
+    {
+      category: 'CRM',
+      Email: messages.filter(m => m.category === 'CRM' && (m.source || 'email') === 'email').length,
+      Telegram: messages.filter(m => m.category === 'CRM' && m.source === 'telegram').length,
+    },
+    {
+      category: 'Support',
+      Email: messages.filter(m => m.category === 'CS' && (m.source || 'email') === 'email').length,
+      Telegram: messages.filter(m => m.category === 'CS' && m.source === 'telegram').length,
+    },
+    {
+      category: 'Spam',
+      Email: messages.filter(m => m.category === 'Spam' && (m.source || 'email') === 'email').length,
+      Telegram: messages.filter(m => m.category === 'Spam' && m.source === 'telegram').length,
+    },
+  ];
+
   return (
     <Card className="glass">
       <CardHeader>
-        <CardTitle className="text-lg">Email Volume Trend</CardTitle>
+        <CardTitle className="text-lg">Categories by Source</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+              <XAxis dataKey="category" stroke="#a1a1aa" fontSize={12} />
+              <YAxis stroke="#a1a1aa" fontSize={12} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#171717',
+                  border: '1px solid #262626',
+                  borderRadius: '8px',
+                }}
+                labelStyle={{ color: '#fafafa' }}
+              />
+              <Legend
+                formatter={(value) => <span style={{ color: '#a1a1aa' }}>{value}</span>}
+              />
+              <Bar dataKey="Email" fill={COLORS.email} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Telegram" fill={COLORS.telegram} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function TrendLineChart({ messages = [] }: ChartProps) {
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    return date;
+  });
+
+  const trendData = last7Days.map(date => {
+    const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const dayMessages = messages.filter(m => {
+      const msgDate = new Date(m.created_at);
+      return msgDate.toDateString() === date.toDateString();
+    });
+
+    return {
+      date: dateStr,
+      Email: dayMessages.filter(m => (m.source || 'email') === 'email').length,
+      Telegram: dayMessages.filter(m => m.source === 'telegram').length,
+      Total: dayMessages.length,
+    };
+  });
+
+  return (
+    <Card className="glass">
+      <CardHeader>
+        <CardTitle className="text-lg">Message Volume Trend (7 Days)</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[300px]">
@@ -151,17 +281,24 @@ export function TrendLineChart() {
               />
               <Line
                 type="monotone"
-                dataKey="emails"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ fill: '#3b82f6', strokeWidth: 2 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="processed"
+                dataKey="Total"
                 stroke="#22c55e"
                 strokeWidth={2}
                 dot={{ fill: '#22c55e', strokeWidth: 2 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Email"
+                stroke={COLORS.email}
+                strokeWidth={2}
+                dot={{ fill: COLORS.email, strokeWidth: 2 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Telegram"
+                stroke={COLORS.telegram}
+                strokeWidth={2}
+                dot={{ fill: COLORS.telegram, strokeWidth: 2 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -171,7 +308,22 @@ export function TrendLineChart() {
   );
 }
 
-export function ConfidenceBarChart() {
+export function ConfidenceBarChart({ messages = [] }: ChartProps) {
+  const confidenceRanges = [
+    { range: '90-100%', min: 0.9, max: 1 },
+    { range: '80-90%', min: 0.8, max: 0.9 },
+    { range: '70-80%', min: 0.7, max: 0.8 },
+    { range: '60-70%', min: 0.6, max: 0.7 },
+    { range: '<60%', min: 0, max: 0.6 },
+  ];
+
+  const confidenceData = confidenceRanges.map(({ range, min, max }) => ({
+    range,
+    count: messages.filter(m => 
+      m.confidence !== null && m.confidence >= min && m.confidence < max
+    ).length,
+  }));
+
   return (
     <Card className="glass">
       <CardHeader>
@@ -201,3 +353,56 @@ export function ConfidenceBarChart() {
   );
 }
 
+export function TelegramChatTypesChart({ messages = [] }: ChartProps) {
+  const telegramMessages = messages.filter(m => m.source === 'telegram');
+  
+  const chatTypeData = [
+    { name: 'DMs', value: telegramMessages.filter(m => m.chat_type === 'dm').length, color: '#22c55e' },
+    { name: 'Groups', value: telegramMessages.filter(m => m.chat_type === 'group').length, color: '#3b82f6' },
+    { name: 'Channels', value: telegramMessages.filter(m => m.chat_type === 'channel').length, color: '#f59e0b' },
+  ].filter(d => d.value > 0);
+
+  if (chatTypeData.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="glass border-blue-400/30">
+      <CardHeader>
+        <CardTitle className="text-lg">Telegram Chat Types</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[300px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chatTypeData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={5}
+                dataKey="value"
+              >
+                {chatTypeData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#171717',
+                  border: '1px solid #262626',
+                  borderRadius: '8px',
+                }}
+                labelStyle={{ color: '#fafafa' }}
+              />
+              <Legend
+                formatter={(value) => <span style={{ color: '#a1a1aa' }}>{value}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

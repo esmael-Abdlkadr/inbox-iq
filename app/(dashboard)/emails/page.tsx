@@ -2,38 +2,40 @@
 
 import { useEffect, useState } from 'react';
 import { Header } from '@/components/layout/Header';
-import { EmailTable } from '@/components/emails/EmailTable';
+import { MessageTable } from '@/components/emails/MessageTable';
 import { Card, CardContent } from '@/components/ui/card';
-import { Mail, Briefcase, HeadphonesIcon, Trash2, Clock, Loader2 } from 'lucide-react';
-import { Email } from '@/types';
+import { Mail, Briefcase, HeadphonesIcon, Trash2, Clock, Loader2, MessageCircle } from 'lucide-react';
+import { Message } from '@/types';
 
-export default function EmailsPage() {
-  const [emails, setEmails] = useState<Email[]>([]);
+export default function MessagesPage() {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
 
   const stats = {
-    all: emails.length,
-    crm: emails.filter((e) => e.category === 'CRM').length,
-    cs: emails.filter((e) => e.category === 'CS').length,
-    spam: emails.filter((e) => e.category === 'Spam').length,
-    pending: emails.filter((e) => !e.category).length,
+    all: messages.length,
+    email: messages.filter((m) => (m.source || 'email') === 'email').length,
+    telegram: messages.filter((m) => m.source === 'telegram').length,
+    crm: messages.filter((m) => m.category === 'CRM').length,
+    cs: messages.filter((m) => m.category === 'CS').length,
+    spam: messages.filter((m) => m.category === 'Spam').length,
+    pending: messages.filter((m) => !m.category).length,
   };
 
   useEffect(() => {
-    fetchEmails();
+    fetchMessages();
   }, []);
 
-  const fetchEmails = async () => {
+  const fetchMessages = async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/emails?limit=50');
       const data = await response.json();
       
       if (data.emails) {
-        setEmails(data.emails);
+        setMessages(data.emails);
       }
     } catch (error) {
-      console.error('Error fetching emails:', error);
+      console.error('Error fetching messages:', error);
     } finally {
       setLoading(false);
     }
@@ -42,12 +44,12 @@ export default function EmailsPage() {
   return (
     <div className="min-h-screen">
       <Header 
-        title="Emails" 
-        subtitle="View and manage all processed emails" 
+        title="Messages" 
+        subtitle="View and manage all processed messages from Email and Telegram" 
       />
       
       <div className="p-6">
-        <div className="grid gap-4 md:grid-cols-5 mb-6">
+        <div className="grid gap-4 md:grid-cols-6 mb-6">
           <Card className="glass">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center">
@@ -62,7 +64,18 @@ export default function EmailsPage() {
           <Card className="glass">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Briefcase className="h-5 w-5 text-blue-400" />
+                <MessageCircle className="h-5 w-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stats.telegram}</p>
+                <p className="text-xs text-muted-foreground">Telegram</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="glass">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                <Briefcase className="h-5 w-5 text-indigo-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{stats.crm}</p>
@@ -112,7 +125,7 @@ export default function EmailsPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <EmailTable emails={emails} />
+              <MessageTable messages={messages} />
             )}
           </CardContent>
         </Card>

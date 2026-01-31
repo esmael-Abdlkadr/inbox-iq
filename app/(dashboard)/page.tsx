@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { StatsCard } from '@/components/dashboard/StatsCard';
-import { RecentEmails } from '@/components/dashboard/RecentEmails';
+import { RecentMessages } from '@/components/dashboard/RecentMessages';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Mail,
   Briefcase,
@@ -17,94 +18,137 @@ import {
   RefreshCw,
   ArrowUpRight,
   Loader2,
+  MessageCircle,
 } from 'lucide-react';
-import { Email, EmailStats } from '@/types';
+import { Message, MessageStats, MessageSource } from '@/types';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [emails, setEmails] = useState<Email[]>([]);
-  const [stats, setStats] = useState<EmailStats>({
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [stats, setStats] = useState<MessageStats>({
     total: 0,
     crm: 0,
     cs: 0,
     spam: 0,
     unprocessed: 0,
+    bySource: {
+      email: 0,
+      telegram: 0,
+    },
   });
   const [loading, setLoading] = useState(true);
+  const [sourceFilter, setSourceFilter] = useState<MessageSource | 'all'>('all');
 
   useEffect(() => {
-    fetchEmails();
+    fetchMessages();
   }, []);
 
-  const fetchEmails = async () => {
+  const fetchMessages = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/emails?limit=10');
+      const response = await fetch('/api/emails?limit=20');
       const data = await response.json();
       
       if (data.emails) {
-        setEmails(data.emails);
+        setMessages(data.emails);
         
-        // Calculate stats from emails
-        const emailList = data.emails as Email[];
+        const messageList = data.emails as Message[];
+        const emailCount = messageList.filter((m) => (m.source || 'email') === 'email').length;
+        const telegramCount = messageList.filter((m) => m.source === 'telegram').length;
+        
         setStats({
-          total: emailList.length,
-          crm: emailList.filter((e) => e.category === 'CRM').length,
-          cs: emailList.filter((e) => e.category === 'CS').length,
-          spam: emailList.filter((e) => e.category === 'Spam').length,
-          unprocessed: emailList.filter((e) => !e.category).length,
+          total: messageList.length,
+          crm: messageList.filter((m) => m.category === 'CRM').length,
+          cs: messageList.filter((m) => m.category === 'CS').length,
+          spam: messageList.filter((m) => m.category === 'Spam').length,
+          unprocessed: messageList.filter((m) => !m.category).length,
+          bySource: {
+            email: emailCount,
+            telegram: telegramCount,
+          },
         });
       }
     } catch (error) {
-      console.error('Error fetching emails:', error);
+      console.error('Error fetching messages:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSyncEmails = () => {
-    // Navigate to settings page to connect Gmail
+  const handleSyncClick = () => {
     router.push('/settings');
+  };
+
+  const filteredMessages = sourceFilter === 'all' 
+    ? messages 
+    : messages.filter(m => (m.source || 'email') === sourceFilter);
+
+  const filteredStats = {
+    total: filteredMessages.length,
+    crm: filteredMessages.filter((m) => m.category === 'CRM').length,
+    cs: filteredMessages.filter((m) => m.category === 'CS').length,
+    spam: filteredMessages.filter((m) => m.category === 'Spam').length,
+    unprocessed: filteredMessages.filter((m) => !m.category).length,
   };
 
   return (
     <div className="min-h-screen">
       <Header 
         title="Dashboard" 
-        subtitle="Overview of your email intelligence"
-        onSyncClick={handleSyncEmails}
+        subtitle="Overview of your message intelligence"
+        onSyncClick={handleSyncClick}
       />
       
       <div className="p-6 space-y-6">
+        {/* Source Filter Tabs */}
+        <Tabs value={sourceFilter} onValueChange={(v) => setSourceFilter(v as MessageSource | 'all')}>
+          <TabsList className="bg-secondary/50">
+            <TabsTrigger value="all" className="gap-2">
+              All
+              <span className="text-xs bg-primary/20 px-1.5 py-0.5 rounded">{stats.total}</span>
+            </TabsTrigger>
+            <TabsTrigger value="email" className="gap-2">
+              <Mail className="h-4 w-4" />
+              Email
+              <span className="text-xs bg-primary/20 px-1.5 py-0.5 rounded">{stats.bySource.email}</span>
+            </TabsTrigger>
+            <TabsTrigger value="telegram" className="gap-2">
+              <MessageCircle className="h-4 w-4" />
+              Telegram
+              <span className="text-xs bg-blue-500/20 px-1.5 py-0.5 rounded">{stats.bySource.telegram}</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard
-            title="Total Emails"
-            value={stats.total}
-            change={loading ? 'Loading...' : `${stats.unprocessed} unprocessed`}
+            title="Total Messages"
+            value={filteredStats.total}
+            change={loading ? 'Loading...' : `${filteredStats.unprocessed} unprocessed`}
             changeType="neutral"
-            icon={Mail}
-            iconColor="text-primary"
+            icon={sourceFilter === 'telegram' ? MessageCircle : Mail}
+            iconColor={sourceFilter === 'telegram' ? 'text-blue-400' : 'text-primary'}
           />
           <StatsCard
             title="CRM Leads"
-            value={stats.crm}
-            change={stats.total > 0 ? `${Math.round((stats.crm / stats.total) * 100)}% of total` : '0%'}
+            value={filteredStats.crm}
+            change={filteredStats.total > 0 ? `${Math.round((filteredStats.crm / filteredStats.total) * 100)}% of total` : '0%'}
             changeType="positive"
             icon={Briefcase}
             iconColor="text-blue-400"
           />
           <StatsCard
             title="Support Tickets"
-            value={stats.cs}
-            change={stats.total > 0 ? `${Math.round((stats.cs / stats.total) * 100)}% of total` : '0%'}
+            value={filteredStats.cs}
+            change={filteredStats.total > 0 ? `${Math.round((filteredStats.cs / filteredStats.total) * 100)}% of total` : '0%'}
             changeType="neutral"
             icon={HeadphonesIcon}
             iconColor="text-green-400"
           />
           <StatsCard
             title="Spam Blocked"
-            value={stats.spam}
-            change={stats.total > 0 ? `${Math.round((stats.spam / stats.total) * 100)}% of total` : '0%'}
+            value={filteredStats.spam}
+            change={filteredStats.total > 0 ? `${Math.round((filteredStats.spam / filteredStats.total) * 100)}% of total` : '0%'}
             changeType="negative"
             icon={Trash2}
             iconColor="text-red-400"
@@ -120,7 +164,7 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             ) : (
-              <RecentEmails emails={emails} />
+              <RecentMessages messages={filteredMessages} sourceFilter={sourceFilter} />
             )}
           </div>
 
@@ -136,19 +180,27 @@ export default function DashboardPage() {
                 <Button 
                   className="w-full justify-start gap-2" 
                   variant="secondary"
-                  onClick={fetchEmails}
+                  onClick={fetchMessages}
                   disabled={loading}
                 >
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  Refresh Emails
+                  Refresh Messages
                 </Button>
                 <Button 
                   className="w-full justify-start gap-2" 
                   variant="secondary"
-                  onClick={handleSyncEmails}
+                  onClick={handleSyncClick}
                 >
-                  <Zap className="h-4 w-4" />
+                  <Mail className="h-4 w-4" />
                   Connect Gmail
+                </Button>
+                <Button 
+                  className="w-full justify-start gap-2" 
+                  variant="secondary"
+                  onClick={handleSyncClick}
+                >
+                  <MessageCircle className="h-4 w-4 text-blue-400" />
+                  Connect Telegram
                 </Button>
                 <Button className="w-full justify-start gap-2" variant="secondary">
                   <ArrowUpRight className="h-4 w-4" />
@@ -176,7 +228,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Emails Processed</span>
+                    <span className="text-muted-foreground">Messages Processed</span>
                     <span className="font-medium">{stats.total - stats.unprocessed}</span>
                   </div>
                   <div className="h-2 rounded-full bg-secondary">
@@ -188,11 +240,28 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Avg. Response Time</span>
-                    <span className="font-medium">1.2s</span>
+                    <span className="text-muted-foreground">Source Distribution</span>
+                    <span className="font-medium">
+                      {stats.bySource.email} / {stats.bySource.telegram}
+                    </span>
                   </div>
-                  <div className="h-2 rounded-full bg-secondary">
-                    <div className="h-2 rounded-full bg-warning" style={{ width: '30%' }} />
+                  <div className="h-2 rounded-full bg-secondary flex overflow-hidden">
+                    <div 
+                      className="h-2 bg-primary" 
+                      style={{ width: stats.total > 0 ? `${(stats.bySource.email / stats.total) * 100}%` : '50%' }} 
+                    />
+                    <div 
+                      className="h-2 bg-blue-400" 
+                      style={{ width: stats.total > 0 ? `${(stats.bySource.telegram / stats.total) * 100}%` : '50%' }} 
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Mail className="h-3 w-3" /> Email
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <MessageCircle className="h-3 w-3 text-blue-400" /> Telegram
+                    </span>
                   </div>
                 </div>
               </CardContent>
